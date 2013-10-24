@@ -7,7 +7,7 @@ require 'nats/server/const'
 
 spec = Gem::Specification.new do |s|
   s.name = 'nats'
-  s.version = NATSD::VERSION
+  s.version = NATSD::VERSION + '.nsnt.1'
   s.summary = 'A lightweight cloud messaging system.'
   s.homepage = 'http://github.com/derekcollison/nats'
   s.description = 'A lightweight cloud messaging system.'

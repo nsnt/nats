@@ -9,7 +9,7 @@ require 'rubygems'
 require 'json'
 
 def usage
-  puts "Usage: nats-top [-s server_uri] [-m local monitor port] [-n num_connections] [-d delay_secs] [--sort sort_by]"
+  puts "Usage: nats-top [-s server_uri] [-m local_monitor_port] [-n num_connections] [-d delay_secs] [--auth id:passwd] [--sort sort_by]"
   puts "--sort_options for more help"
   exit
 end
@@ -30,6 +30,7 @@ opts_parser = OptionParser.new do |opts|
   opts.on('-d delay')           { |delay|    $delay = delay.to_f }
   opts.on('--sort sort_by')     { |sort_key| $sort_key = sort_key }
   opts.on('--sort_options')     { sort_options_help }
+  opts.on('--auth id:passwd')   { |auth|     $account, $passwd = auth.split(':', 2) }
   opts.on('-h')     { usage }
   opts.on('--help') { usage }
 end
@@ -42,9 +43,7 @@ DEFAULT_SORT = 'pending_size'
 
 $nats_port = DEFAULT_MONITOR_PORT if $nats_port.nil?
 $num_connections = DEFAULT_NUM_CONNECTIONS if $num_connections.nil?
-$nats_server = "http://localhost:#{$nats_port}" if $nats_server.nil?
-
-$nats_server = "http://#{$nats_server}" unless $nats_server.start_with?('http')
+$nats_server = "localhost" if $nats_server.nil?
 
 $delay = DEFAULT_DELAY if $delay.nil?
 $sort_key = DEFAULT_SORT if $sort_key.nil?
@@ -55,8 +54,13 @@ unless $valid_sort_options.include?($sort_key)
   sort_options_help
 end
 
-varz_uri = URI.parse("#{$nats_server}/varz")
-connz_uri = URI.parse("#{$nats_server}/connz?n=#{$num_connections}&s=#{$sort_key}")
+varz_request = Net::HTTP::Get.new("/varz")
+connz_request = Net::HTTP::Get.new("/connz?n=#{$num_connections}&s=#{$sort_key}")
+
+if ($account && $passwd)
+  varz_request.basic_auth($account, $passwd)
+  connz_request.basic_auth($account, $passwd)
+end
 
 def psize(size, prec=1)
   return 'NA' unless size
@@ -81,7 +85,7 @@ first = true
 while true
   begin
 
-    varz_response = Net::HTTP::get_response(varz_uri)
+    varz_response = Net::HTTP.new($nats_server, $nats_port).start { |http| http.request(varz_request) }
     varz = JSON.parse(varz_response.body, :symbolize_keys => true, :symbolize_names => true)
 
     # Simple rates
@@ -100,7 +104,7 @@ while true
       rate_out_bytes = delta_out_bytes / tdelta
     end
 
-    connz_response = Net::HTTP::get_response(connz_uri)
+    connz_response = Net::HTTP.new($nats_server, $nats_port).start { |http| http.request(connz_request) }
     connz = JSON.parse(connz_response.body, :symbolize_keys => true, :symbolize_names => true)
 
     clear_screen
@@ -137,10 +141,8 @@ while true
 
   rescue => e
     puts "Error: #{e}"
+    puts "  #{e.backtrace}"
     exit(1)
   end
 
 end
-
-
-
